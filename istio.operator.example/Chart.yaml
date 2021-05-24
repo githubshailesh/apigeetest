@@ -1,0 +1,4 @@
+apiVersion: v2
+description: A Helm chart to create istio-operator-example
+name: istio-operator-example
+version: 0.0.1

@@ -1,0 +1,25 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: default-istio-operator
+spec:
+  profile: asm-multicloud
+  tag: {{ .Values.tag }}
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          serviceAnnotations:
+            service.beta.kubernetes.io/azure-load-balancer-resource-group: {{ .Values.serviceAnnotations }}
+          service:
+            type: LoadBalancer
+            loadBalancerIP: {{ .Values.LBIp }}
+            ports:
+              - name: https
+                port: 443
+                targetPort: 8443
+          hpaSpec:
+            maxReplicas: 3
+  meshConfig:
+    enableAutoMtls: false
