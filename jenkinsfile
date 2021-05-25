@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+    stages {
+        stage('Initialization') {
+            steps {
+                echo 'Cloning from Github ....'
+                script {
+                    git credentialsId: 'githubshailesh', url: 'https://github.com/githubshailesh/apigeetest.git'
+                    sh "git checkout master"
+                    sh 'tar xzf istio-1.7.6-asm.1-linux-amd64.tar.gz'
+                    
+                    ISTIODIR=env.WORKSPACE + "/istio-1.7.6-asm.1/bin"
+                }
+            }
+        }
+
+        stage('AZURE Login') {
+            steps {
+                script {
+                    RESOURCE_GROUP="rg-kp-apigee-sandbox-01"
+                    ASM_VERSION="1.7.6-asm.1"
+                    CLUSTER_NAME="apigee-hybrid-acn-sb02"
+
+                    withCredentials([azureServicePrincipal('f5a0d7e4-16e0-4d7f-81ab-52b8d00c15dc')]) {
+                        sh 'az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET -t $AZURE_TENANT_ID'
+                        sh 'az account set -s $AZURE_SUBSCRIPTION_ID'
+                    }
+
+
+                    sh 'az aks get-credentials --resource-group ' + RESOURCE_GROUP + ' --name '+ CLUSTER_NAME
+
+                }
+            }
+        }
+
+        stage('Install Certificate Manager') {
+            steps {
+                sh 'kubectl apply --validate=false -f cert-manager.yaml'
+            }
+        }
+
+        stage('Setup Cluster Public IP') {
+            steps {
+                script{
+                    statusCode = sh(script:'az network public-ip show --resource-group rg-kp-apigee-sandbox-01 --name apigee-hybrid-acn-sb01-public-ip-sjv --query ipAddress --output tsv', returnStatus:true)
+                    echo "${statusCode}"
+                    if (statusCode == 0 ){
+                        PUBLICIP = sh(script:'az network public-ip show --resource-group rg-kp-apigee-sandbox-01 --name apigee-hybrid-acn-sb01-public-ip-sjv --query ipAddress --output tsv', returnStdout:true)    
+                        println "Existing public IP is $PUBLICIP"
+                    }
+                    else {
+                        PUBLICIP = sh(script:'az network public-ip create --resource-group rg-kp-apigee-sandbox-01 --name apigee-hybrid-acn-sb01-public-ip-sjv --location westus2 --sku Standard --allocation-method static --query publicIp.ipAddress -o tsv', returnStdout:true)
+                        println "New Public IP is $PUBLICIP"
+                    }
+                }
+            }
+        }
+
+        stage('Setup Namespace') {
+            steps {
+                sh 'kubectl create namespace istio-system'
+            }
+        }
+        
+        stage('Setup Istio-Operator') {
+            steps {
+                script{
+                    sh 'helm template istio.operator.example --set tag=1.7.6-asm.1,serviceAnnotations=rg-kp-apigee-sandbox-01,LBIp=' + PUBLICIP.trim()  + ' > manifest-istio-operator.yaml'
+
+                    sh ISTIODIR + '/istioctl install -f manifest-istio-operator.yaml'
+                }
+            }
+        }
+    }
+}
