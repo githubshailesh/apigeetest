@@ -1,0 +1,4 @@
+apiVersion: v2
+kind: Namespace
+metadata:
+  name: {{ .Values.istio-namespace-name }}
