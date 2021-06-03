@@ -58,7 +58,9 @@ pipeline {
 
         stage('Setup Namespace') {
             steps {
-                sh 'kubectl create namespace istio-system'
+                // sh 'kubectl create namespace istio-system'
+                sh 'helm template K8/istio-ns --set istionamespacename=istio-system > manifest-istio-ns.yaml'
+                sh 'kubectl apply --validate=false -f manifest-istio-ns.yaml'
             }
         }
         
